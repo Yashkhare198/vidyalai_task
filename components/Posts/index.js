@@ -1,9 +1,9 @@
+import React, { useEffect, useState,useContext } from 'react';
 import axios from 'axios';
-import React, { useEffect, useState } from 'react';
 import styled from '@emotion/styled';
 import Post from './Post';
 import Container from '../common/Container';
-import useWindowWidth from '../hooks/useWindowWidth';
+import { WindowWidthContext } from '../hooks/useWindowWidth';
 
 const PostListContainer = styled.div(() => ({
   display: 'flex',
@@ -27,48 +27,84 @@ const LoadMoreButton = styled.button(() => ({
     backgroundColor: '#0056b3',
   },
   '&:disabled': {
-    backgroundColor: '#808080',
-    cursor: 'default',
+    display: 'none',
   },
 }));
 
 export default function Posts() {
   const [posts, setPosts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [start, setStart] = useState(0);
+  const [totalPosts, setTotalPosts] = useState(0);
+  const { isSmallerDevice } = useContext(WindowWidthContext);
+  const limit = isSmallerDevice ? 5 : 10;
 
-  const { isSmallerDevice } = useWindowWidth();
+  const fetchPosts = async (start, limit) => {
+    try {
+      const { data: newPosts } = await axios.get('/api/v1/posts', {
+        params: { start, limit },
+       
+      });
+      console.log(start);
+      console.log(limit);
+      setPosts(prevPosts => [...prevPosts, ...newPosts]);
+      setStart(start + newPosts.length); 
+    } catch (error) {
+      console.error('Failed to fetch posts:', error);
+    }
+  };
 
   useEffect(() => {
-    const fetchPost = async () => {
-      const { data: posts } = await axios.get('/api/v1/posts', {
-        params: { start: 0, limit: isSmallerDevice ? 5 : 10 },
-      });
-      setPosts(posts);
-    };
-
-    fetchPost();
+    fetchPosts(start, limit);
   }, [isSmallerDevice]);
+
+  useEffect(() => {
+    const getTotalPosts = async () => {
+      try {
+        const response = await axios.get('/api/v1/posts');
+        console.log(response);
+        setTotalPosts(response.data.length);
+      } catch (error) {
+        console.error('Failed to fetch total posts:', error);
+      }
+    };
+    getTotalPosts();
+  }, []);
 
   const handleClick = () => {
     setIsLoading(true);
-
-    setTimeout(() => {
+ 
+    console.log(posts.length);
+    const remainingPosts = totalPosts - posts.length;
+    // console.log(remainingPosts);
+    const postsToFetch = Math.min(limit, remainingPosts);
+    fetchPosts(start+10, postsToFetch).finally(() => {
       setIsLoading(false);
-    }, 3000);
+    });
   };
+
+ 
+  const totalImagesLoaded = posts.length / 3;
+  const totalImages = Math.ceil(totalPosts / 3); 
+  const allImagesLoaded = totalImagesLoaded >= totalImages;
 
   return (
     <Container>
       <PostListContainer>
         {posts.map(post => (
-          <Post post={post} />
+          
+          <Post key={post.id} post={post} />
+         
+          
         ))}
       </PostListContainer>
 
       <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <LoadMoreButton onClick={handleClick} disabled={isLoading}>
-          {!isLoading ? 'Load More' : 'Loading...'}
-        </LoadMoreButton>
+        { ( // Show the "Load More" button only if there are more images to load
+          <LoadMoreButton onClick={handleClick} disabled={isLoading}>
+            {!isLoading ? 'Load More' : 'Loading...'}
+          </LoadMoreButton>
+        )}
       </div>
     </Container>
   );
